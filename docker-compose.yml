@@ -1,0 +1,43 @@
+services:
+  app:
+    build: .
+    container_name: doc-qa-app
+    ports:
+      - "${API_PORT:-8000}:8000"
+      - "${GRADIO_PORT:-7860}:7860"
+    env_file: .env
+    volumes:
+      - ./chroma/knowledge:/app/chroma/knowledge
+      - ./chroma/vector_store:/app/chroma/vector_store
+      - ./db:/app/db
+      - ./logs:/app/logs
+      - ./structured_data:/app/structured_data
+    depends_on:
+      - chromadb
+      - redis
+    restart: unless-stopped
+
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: doc-qa-chromadb
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: doc-qa-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  chroma_data:
+  redis_data:

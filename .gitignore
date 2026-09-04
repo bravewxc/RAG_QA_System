@@ -1,0 +1,74 @@
+# ========== 敏感信息 ==========
+# 环境变量（含 API 密钥），仅提交 .env.example
+.env
+.env.local
+.env.*.local
+
+# ========== 项目文档（内部优化记录，不对外公开） ==========
+优化文档/
+优化指引/
+
+# ========== Python ==========
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+*.egg-info/
+.eggs/
+
+# ========== 虚拟环境 ==========
+.venv/
+venv/
+ENV/
+env/
+
+# ========== IDE ==========
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ========== 运行时数据（启动后自动生成） ==========
+# 日志
+logs/
+*.log
+
+# 数据库（聊天历史/缓存/统计，含用户隐私）
+db/
+*.db
+*.sqlite3
+
+# 向量索引（首次运行自动重建）
+chroma/vector_store/
+
+# 知识库源文档（版权 PDF，请自行放置，见 README）
+chroma/knowledge/*
+!chroma/knowledge/.gitkeep
+
+# 示例文档（版权 PDF，请自行放置）
+示例文档/
+
+# 评测运行输出（结果/报告/日志，运行后自动生成）
+evaluation/results/
+evaluation/reports/
+
+# 评测集备份
+*.bak
+
+# ========== 临时文件 ==========
+_tmp_pdf_text/
+_upload_test.txt
+tmp/
+temp/
+*.tmp
+.DS_Store
+Thumbs.db
+
+# ========== 测试覆盖率 ==========
+.pytest_cache/
+.coverage
+htmlcov/
