@@ -424,12 +424,16 @@ class CombineClient(MyKnowledge):
                     kbs.append(kb)
         return kbs
 
-    def _build_llm_chain(self, collection, model, max_length, temperature):
+    def _build_llm_chain(self, collection, model, max_length, temperature, request_timeout=None):
         """
         构建生成链：prompt | chat
         返回 (chain, prompt) 供 stream/invoke 使用
+        request_timeout: 单次请求超时（秒），None 走 get_lc_model_client 默认 120s
         """
-        chat = get_lc_model_client(model=model, max_tokens=max_length, temperature=temperature)
+        kw = dict(model=model, max_tokens=max_length, temperature=temperature)
+        if request_timeout is not None:
+            kw['request_timeout'] = request_timeout
+        chat = get_lc_model_client(**kw)
         prompt = qa_prompt if collection else normal_prompt
         return prompt | chat, prompt
 
@@ -453,16 +457,18 @@ class CombineClient(MyKnowledge):
         max_length: int = 256,
         temperature: float = 1,
         session_id: str = "default",
+        request_timeout: Optional[int] = None,
     ) -> str:
         """
         基于外部传入的上下文文档生成回答（跳过检索）。
         复用 invoke 的 prompt 模板、历史压缩、知识库标签与 429 处理，保证生成行为与线上一致。
+        request_timeout: 单次请求超时（秒），None 走默认 120s；评测长上下文题可传 180 避免超时空答案。
         """
         context_text = format_docs(context_docs)
         messages = self._prepare_history(session_id, model)
         history = self._get_history(session_id)
         history.add_user_message(self._tag_message(question, collection))
-        chain, _ = self._build_llm_chain(collection, model, max_length, temperature)
+        chain, _ = self._build_llm_chain(collection, model, max_length, temperature, request_timeout)
         inputs = {"input": question, "context": context_text, "chat_history": messages}
         try:
             resp = with_retry(chain.invoke)(inputs)

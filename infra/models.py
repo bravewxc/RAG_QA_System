@@ -41,7 +41,15 @@ class _ConcurrencyLimitedChatOpenAI(ChatOpenAI):
 
 ALI_TONGYI_API_KEY_OS_VAR_NAME = "DASHSCOPE_API_KEY"
 ALI_TONGYI_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-ALI_TONGYI_MAX_MODEL = "qwen3.7-flash-2026-07-15"
+
+
+def _get_dashscope_api_key() -> Optional[str]:
+    """API key 解析优先级：OS 环境变量 > 本地 .env（经 pydantic-settings 读取）。
+
+    两者都没有时返回 None，与原先仅用 os.getenv 的行为一致。
+    """
+    return os.getenv(ALI_TONGYI_API_KEY_OS_VAR_NAME) or settings.DASHSCOPE_API_KEY or None
+ALI_TONGYI_MAX_MODEL = "qwen3.8-flash"
 ALI_TONGYI_DEEPSEEK_V4_FLASH = "deepseek-v4-flash-0731"
 ALI_TONGYI_DEEPSEEK_V3 = "deepseek-v3"
 ALI_TONGYI_REASONER_MODEL = "qvq-max-latest"
@@ -162,7 +170,7 @@ class SafeDashScopeRerank(DashScopeRerank):
         return result_dicts
 
 
-def get_lc_model_client(api_key=os.getenv(ALI_TONGYI_API_KEY_OS_VAR_NAME), base_url=ALI_TONGYI_URL
+def get_lc_model_client(api_key=None, base_url=ALI_TONGYI_URL
                         , model=ALI_TONGYI_MAX_MODEL, temperature=0.7, max_tokens=8000,verbose=False, debug=False,
                         max_retries=6, request_timeout=120):
     """
@@ -174,6 +182,9 @@ def get_lc_model_client(api_key=os.getenv(ALI_TONGYI_API_KEY_OS_VAR_NAME), base_
         request_timeout：单次请求超时时间（秒），默认 120s
     """
     function_name = inspect.currentframe().f_code.co_name
+    # 未显式传 key 时：OS 环境变量 > 本地 .env（settings），均为空则保持 None（报缺 key 的错）
+    if api_key is None:
+        api_key = _get_dashscope_api_key()
     if (verbose):
         print(f"{function_name}-平台：{base_url},模型：{model},温度：{temperature}")
     if (debug):
@@ -185,7 +196,7 @@ def get_lc_model_client(api_key=os.getenv(ALI_TONGYI_API_KEY_OS_VAR_NAME), base_
 def get_ali_embeddings():
     """通过LangChain获得一个阿里通义千问嵌入模型的实例"""
     return _RetryableDashScopeEmbeddings(
-        model=ALI_TONGYI_EMBEDDING_MODEL, dashscope_api_key=os.getenv(ALI_TONGYI_API_KEY_OS_VAR_NAME)
+        model=ALI_TONGYI_EMBEDDING_MODEL, dashscope_api_key=_get_dashscope_api_key()
     )
 
 
@@ -213,7 +224,7 @@ def get_ali_rerank(top_n=10, min_score_threshold=None, boost_keywords_map=None):
     :return: 阿里通义千问嵌入模型的实例
     '''
     rerank = SafeDashScopeRerank(
-        model=ALI_TONGYI_RERANK_MODEL, dashscope_api_key=os.getenv(ALI_TONGYI_API_KEY_OS_VAR_NAME),
+        model=ALI_TONGYI_RERANK_MODEL, dashscope_api_key=_get_dashscope_api_key(),
         top_n=top_n
     )
     # DashScopeRerank.validate_environment 会覆盖传入的 model 为默认的 gte-rerank（旧版），

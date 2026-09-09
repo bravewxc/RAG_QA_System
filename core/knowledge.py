@@ -361,12 +361,13 @@ def create_indexes(collection_name: str, dir_path: str,
     """
     logger.info(f"record_manager: {record_manager}")
     # 初始化数据库表结构
-    record_manager.create_schema()
     """
-    在你开始加载和索引文档之前，调用create_schema() 方法，确保用于存储文档元数据和索引信息的数据库表已经存在。
+    在开始加载和索引文档之前，调用create_schema() 方法，确保用于存储文档元数据和索引信息的数据库表已经存在。
     如果是第一次运行这个脚本，create_schema()方法会自动创建这些表。
     对于后续运行，如果表已经存在，则该方法不会重复创建，而是直接通过。
     """
+    record_manager.create_schema()
+
     # 目录级知识库：加载目录下所有支持的文件，合并切分后统一索引（一个目录 = 一个知识库）
     logger.info(f"准备进行文件的加载切分.... 目录: {dir_path}")
     documents = []

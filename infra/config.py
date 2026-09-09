@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     # 模型配置
     ANSWER_MODEL: str = "deepseek-v4-flash-0731"
-    EVAL_MODEL: str = "qwen3.7-flash-2026-07-15"
+    EVAL_MODEL: str = "qwen3.8-flash"
     EMBEDDING_MODEL: str = "text-embedding-v4"
     RERANK_MODEL: str = "gte-rerank-v2"
 
@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     DASHSCOPE_MAX_CONCURRENCY: int = 8
     API_RATE_LIMIT: str = "30/minute"
 
-    # 可观测性
+    # 可观测性（真实密钥放本地 .env，不入库）
     LANGSMITH_API_KEY: str = ""
     LANGSMITH_PROJECT: str = "doc-qa-system"
     LANGSMITH_TRACING: bool = False

@@ -73,7 +73,7 @@ RUNS_JSON = os.path.join(RESULT_DIR, 'latest_invoke.json')  # 最近一次 invok
 # 评测用固定参数（保证可复现，与生产 Gradio 默认参数区分）
 ANSWER_MODEL = ALI_TONGYI_DEEPSEEK_V4_FLASH  # 默认评测模型（更稳、QPS 高）
 EVAL_MODEL = ALI_TONGYI_MAX_MODEL
-EVAL_MAX_LENGTH = 512
+EVAL_MAX_LENGTH = 1024  # AR优化建议1：从512提升至1024，避免长答案（推理/跨期题）被max_tokens截断导致AR计0
 EVAL_TEMPERATURE = 0.1
 
 # 方案A：并发化配置
@@ -106,7 +106,7 @@ def get_embedding_name():
 
 def get_prompt_fingerprint():
     """从 combine_client 的 qa_system_prompt 计算摘要，作为 Prompt 版本指纹"""
-    from combine_client import qa_system_prompt
+    from core.combine_client import qa_system_prompt
     return qa_system_prompt.strip().replace('\n', ' ')[:60] + '...'
 
 
@@ -216,6 +216,7 @@ def batch_answer(client, rows, collection, max_workers=ANSWER_WORKERS):
                     q, context_docs, collection,
                     model=ANSWER_MODEL, max_length=EVAL_MAX_LENGTH,
                     temperature=EVAL_TEMPERATURE, session_id=session_id,
+                    request_timeout=180,  # AR优化建议2：长上下文hard题生成超时从120s提到180s，减少空答案
                 )
                 if answer.strip():
                     break

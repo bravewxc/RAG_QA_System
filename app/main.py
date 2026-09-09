@@ -15,6 +15,10 @@ from loguru import logger
 from core.combine_client import CombineClient
 from infra.logger import setup_logger
 from infra.models import ALI_TONGYI_MAX_MODEL, ALI_TONGYI_DEEPSEEK_V4_FLASH
+from infra.observability import setup_langsmith_tracing
+
+# 启用 LangSmith 全链路追踪（必须在实例化任何 LangChain 组件之前）
+setup_langsmith_tracing()
 
 # 定义一个包含两个LLM模型名称的列表，供用户选择
 LLM_MODELS = [ALI_TONGYI_MAX_MODEL, ALI_TONGYI_DEEPSEEK_V4_FLASH]
