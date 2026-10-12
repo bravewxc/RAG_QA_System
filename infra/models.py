@@ -73,7 +73,7 @@ class SafeDashScopeRerank(DashScopeRerank):
 
     # 措施22：rerank 后 soft boost 关键词映射
     # {query关键词: [匹配的 statement_type 列表]}，匹配的 chunk relevance_score *= 1.1
-    boost_keywords_map: Optional[Dict[str, List[str]]] = None
+    zboost_keywords_map: Optional[Dict[str, List[str]]] = None
 
     @with_retry
     def rerank(

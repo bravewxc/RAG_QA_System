@@ -59,5 +59,17 @@ class Settings(BaseSettings):
     SEMANTIC_CACHE_THRESHOLD: float = 0.92
     SEMANTIC_CACHE_TTL: int = 7200
 
+    # 图片/图表多模态处理（措施25）
+    IMAGE_CAPTION_ENABLED: bool = True          # 总开关：False 时完全跳过图片处理（纯文本行为）
+    IMAGE_CAPTION_MODEL: str = "qwen-vl-plus"   # 多模态理解模型（DashScope 兼容模式）
+    IMAGE_STORE_DIR: str = "./chroma/image_store"  # 原图PNG + 说明缓存JSON 落盘目录
+    IMAGE_MIN_SIDE_PT: float = 100.0            # 光栅图短边最小值(PDF点)，过滤logo/图标/装饰
+    IMAGE_MAX_PER_PAGE: int = 4                 # 每页最多处理的图片数
+    IMAGE_MAX_PER_PDF: int = 30                 # 每个PDF最多处理的图片数（控制多模态调用成本）
+    IMAGE_VECTOR_OBJ_THRESHOLD: int = 25        # 矢量元素数阈值：超过视为图表页（矢量绘图检测）
+
+    # 文档位置精确定位（措施26）：chunk metadata 注入页码+行号，支持"第N页第M-K行"级溯源
+    LINE_LOCATE_ENABLED: bool = True
+
 
 settings = Settings()

@@ -68,7 +68,8 @@ qa_system_prompt = """你是一名知识问答助手，
 - 当问题涉及"具体/明细/单独/分别/子项目/每个/分项"等明细维度，但上下文仅提供汇总数据而无对应明细时，必须明确回答"年报未披露该明细"，并给出已披露的汇总数据，不得编造明细。
 
 【上下文】
-- 上下文片段可能带有 [来源文件:xxx] 标注，表示该内容来自 xxx 文件；引用时请注明来源文件。
+- 上下文片段可能带有 [来源文件:xxx 第N页 第M-K行] 标注，表示该内容来自 xxx 文件第N页第M至K行；
+  引用时请注明来源文件及页码、行号，方便用户对照原文核查。
 {context}
         """
 
@@ -89,16 +90,34 @@ normal_prompt = ChatPromptTemplate.from_messages(
 )
 
 
+def _location_label(meta: dict) -> str:
+    """把页码/行号 metadata 转成人读的位置标注，如" 第2页 第13-18行"（缺哪项省哪项）。
+
+    页码转换：pypdf 的 page 从 0 起数，展示时 +1 转自然页码；
+    图片说明chunk（措施25）有页无行；TXT/MD（措施26）有行无页；文本PDF chunk页行俱全。
+    """
+    label = ""
+    page = meta.get("page")
+    if isinstance(page, int):
+        label += f" 第{page + 1}页"
+    ls, le = meta.get("line_start"), meta.get("line_end")
+    if isinstance(ls, int) and isinstance(le, int) and ls >= 1 and le >= ls:
+        label += f" 第{ls}行" if ls == le else f" 第{ls}-{le}行"
+    return label
+
+
 def format_docs(docs: List[Document]) -> str:
-    """将检索到的文档拼接为上下文字符串，并标注每个片段的来源文件（多文件知识库可溯源）"""
+    """将检索到的文档拼接为上下文字符串，并标注每个片段的来源位置
+    （来源文件+页码+行号，多文件知识库可溯源到"某文件第几页第几行"）"""
     if not docs:
         return ""
     parts = []
     for d in docs:
         src = d.metadata.get("source", "") or ""
         fname = os.path.basename(str(src)) if src else ""
+        loc = _location_label(d.metadata)
         if fname:
-            parts.append(f"[来源文件:{fname}]\n{d.page_content}")
+            parts.append(f"[来源文件:{fname}{loc}]\n{d.page_content}")
         else:
             parts.append(d.page_content)
     return "\n\n".join(parts)
