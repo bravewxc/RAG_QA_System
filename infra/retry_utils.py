@@ -13,15 +13,17 @@
 - Rerank：在 SafeDashScopeRerank.rerank 外层加重试
 """
 import functools
-import time
 from typing import Callable, TypeVar
 
+import grpc
 import openai
 from loguru import logger
+from pymilvus.exceptions import MilvusException
 from tenacity import (
     retry,
     stop_after_attempt,
     wait_exponential,
+    retry_if_exception,
     retry_if_exception_type,
     before_sleep_log,
 )
@@ -92,4 +94,68 @@ def with_retry(func: Callable[..., T]) -> Callable[..., T]:
         except RETRYABLE_EXCEPTIONS as e:
             logger.warning(f"可重试异常, 即将重试: {type(e).__name__}: {e}")
             raise
+    return wrapper
+
+
+def is_retryable_milvus_error(exc: Exception) -> bool:
+    """判断 Milvus/gRPC 异常是否值得重试。
+
+    仅重试限流、服务端暂不可用、连接中断和超时；collection/schema/表达式/
+    主键等参数或数据错误直接抛出，避免无效重试掩盖真实问题。
+    """
+    if isinstance(exc, grpc.RpcError):
+        return exc.code() in {
+            grpc.StatusCode.DEADLINE_EXCEEDED,
+            grpc.StatusCode.UNAVAILABLE,
+            grpc.StatusCode.RESOURCE_EXHAUSTED,
+            grpc.StatusCode.ABORTED,
+            grpc.StatusCode.INTERNAL,
+        }
+
+    if not isinstance(exc, MilvusException):
+        return False
+
+    code = getattr(exc, "code", None)
+    if isinstance(code, int) and code in {429, 500, 502, 503, 504}:
+        return True
+
+    message = str(exc).lower()
+    transient_keywords = (
+        "timeout",
+        "timed out",
+        "deadline exceeded",
+        "unavailable",
+        "connection reset",
+        "connection refused",
+        "temporarily",
+        "rate limit",
+        "resource exhausted",
+        "service unavailable",
+    )
+    return any(keyword in message for keyword in transient_keywords)
+
+
+def with_milvus_retry(func: Callable[..., T]) -> Callable[..., T]:
+    """为 Milvus 初始化、写入、检索和删除增加 3 次指数退避重试。"""
+
+    @retry(
+        retry=retry_if_exception(is_retryable_milvus_error),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=4),
+        before_sleep=before_sleep_log(logger, "WARNING"),
+        reraise=True,
+    )
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs) -> T:
+        try:
+            return func(*args, **kwargs)
+        except (MilvusException, grpc.RpcError) as e:
+            retryable = is_retryable_milvus_error(e)
+            log = logger.warning if retryable else logger.error
+            log(
+                f"Milvus 调用失败: func={func.__name__}, retryable={retryable}, "
+                f"error={type(e).__name__}: {e}"
+            )
+            raise
+
     return wrapper

@@ -30,10 +30,18 @@ class Settings(BaseSettings):
     GRADIO_HOST: str = "0.0.0.0"
     GRADIO_PORT: int = 7860
 
-    # Chroma 向量库
-    CHROMA_HOST: str = "chromadb"
-    CHROMA_PORT: int = 8000
-    CHROMA_PERSIST_DIR: str = "./chroma/vector_store"
+    # Milvus 向量库（默认连接本机 Standalone，可通过 URI/认证信息切换云上实例）
+    MILVUS_URI: str = "http://localhost:19530"
+    MILVUS_DB_NAME: str = "default"
+    MILVUS_TOKEN: str = ""       # 优先使用 token/API Key；为空时使用用户名密码
+    MILVUS_USER: str = ""
+    MILVUS_PASSWORD: str = ""
+    MILVUS_SECURE: bool = False
+    MILVUS_TIMEOUT: float = 30.0
+    MILVUS_CONSISTENCY_LEVEL: str = "Strong"
+    MILVUS_HNSW_M: int = 16
+    MILVUS_HNSW_EF_CONSTRUCTION: int = 64
+    MILVUS_HNSW_EF: int = 64
 
     # Redis 缓存（预留，当前缓存用 SQLite）
     REDIS_HOST: str = "redis"

@@ -6,27 +6,77 @@ services:
       - "${API_PORT:-8000}:8000"
       - "${GRADIO_PORT:-7860}:7860"
     env_file: .env
+    environment:
+      MILVUS_URI: http://milvus:19530
     volumes:
       - ./chroma/knowledge:/app/chroma/knowledge
-      - ./chroma/vector_store:/app/chroma/vector_store
       - ./db:/app/db
       - ./logs:/app/logs
       - ./structured_data:/app/structured_data
     depends_on:
-      - chromadb
-      - redis
+      milvus:
+        condition: service_healthy
+      redis:
+        condition: service_started
     restart: unless-stopped
 
-  chromadb:
-    image: chromadb/chroma:latest
-    container_name: doc-qa-chromadb
-    ports:
-      - "8001:8000"
-    volumes:
-      - chroma_data:/chroma/chroma
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.18
+    container_name: doc-qa-milvus-etcd
     environment:
-      - IS_PERSISTENT=TRUE
-      - PERSIST_DIRECTORY=/chroma/chroma
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+    volumes:
+      - etcd_data:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    restart: unless-stopped
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2023-12-20T01-00-02Z
+    container_name: doc-qa-milvus-minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    healthcheck:
+      test: ["CMD-SHELL", "mc alias set local http://localhost:9000 minioadmin minioadmin >/dev/null 2>&1 && mc ready local"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    restart: unless-stopped
+
+  milvus:
+    image: milvusdb/milvus:v2.5.15
+    container_name: doc-qa-milvus
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+    volumes:
+      - milvus_data:/var/lib/milvus
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 20s
+      retries: 5
+      start_period: 90s
+    depends_on:
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     restart: unless-stopped
 
   redis:
@@ -39,5 +89,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  chroma_data:
+  etcd_data:
+  minio_data:
+  milvus_data:
   redis_data:

@@ -8,7 +8,6 @@ import jieba
 from langchain_classic.indexes import SQLRecordManager
 from langchain_classic.retrievers import ContextualCompressionRetriever, RePhraseQueryRetriever, EnsembleRetriever, MultiQueryRetriever
 from langchain_classic.retrievers.document_compressors import LLMChainFilter, CrossEncoderReranker
-from langchain_chroma import Chroma
 from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
@@ -17,6 +16,7 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 
 from core.custom_loader import MyCustomLoader
+from core.milvus_store import create_milvus_store
 from infra.models import get_lc_model_client, get_ali_embeddings, get_ali_rerank
 from loguru import logger
 
@@ -127,8 +127,8 @@ def _jieba_preprocessing_func(text: str) -> List[str]:
     return list(jieba.cut(text))
 
 # 设置知识库 向量模型 重排序模型的路径
-KNOWLEDGE_DIR = './chroma/knowledge/'          # 知识库源文件目录（目录即知识库）
-VECTOR_STORE_DIR = './chroma/vector_store'     # Chroma 向量库持久化目录（按 collection 的 md5 分目录存放）
+KNOWLEDGE_DIR = './chroma/knowledge/'          # 知识库源文件目录（目录即知识库，保留原数据路径）
+VECTOR_STORE_DIR = './milvus/vector_store'     # 可选 Milvus Lite 文件目录；远程 Milvus 模式不使用
 embedding_model = get_ali_embeddings()
 
 class MyKnowledge:
@@ -342,21 +342,18 @@ class MyKnowledge:
 # 创建索引
 def create_indexes(collection_name: str, dir_path: str,
                    embedding_function: Optional[Embeddings] = None):
-    # 向量库持久化统一存放在 VECTOR_STORE_DIR（chroma/vector_store/）下，按 collection 的 md5 分目录
-    os.makedirs(VECTOR_STORE_DIR, exist_ok=True)
-    # 初始化Chroma数据库
-    # 措施4：距离度量从默认的 L2 切换为 cosine，更契合语义相似度检索（文本向量模长不一时 cosine 更稳定）
-    db = Chroma(collection_name=collection_name,
-                embedding_function=embedding_function,
-                persist_directory=os.path.join(VECTOR_STORE_DIR, collection_name),
-                collection_metadata={"hnsw:space": "cosine"})
+    # Milvus VectorStore：HNSW + COSINE，保留 LangChain VectorStore/Retriever 调用接口。
+    # 物理 collection 名由适配层添加 kb_ 前缀，外部仍使用知识库目录 MD5。
+    if embedding_function is None:
+        embedding_function = get_ali_embeddings()
+    db = create_milvus_store(collection_name, embedding_function)
 
-    # 初始化记录管理器:管理与文档相关的元数据和检索信息，并将这些数据存储在一个SQL数据库中
+    # 记录管理器沿用 SQLite；命名空间切换为 milvus，避免误用旧 Chroma 指纹记录。
     record_manager = SQLRecordManager(
-        f"chromadb/{collection_name}", db_url="sqlite:///db/record_manager_cache.db"
+        f"milvus/{collection_name}", db_url="sqlite:///db/record_manager_cache.db"
     )
     """
-    在文档被索引到Chroma数据库之前，SQLRecordManager会管理这些文档的索引记录。
+    在文档被索引到 Milvus 之前，SQLRecordManager 管理文档的索引记录。
     它确保文档的索引状态被正确记录，避免重复索引或遗漏。
     """
     logger.info(f"record_manager: {record_manager}")

@@ -129,7 +129,11 @@ def format_docs(docs: List[Document]) -> str:
 #       当问题含取数关键词时，从 JSON 精确匹配行项目，作为补充上下文注入。
 #       原 chunk 检索链路完全不变，结构化数据独立注入，不改变原有 chunk 的向量分布。
 _structured_data_cache = None
-STRUCTURED_DATA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'structured_data', 'financial_statements.json')
+STRUCTURED_DATA_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    'structured_data',
+    'financial_statements.json',
+)
 
 # 触发结构化数据检索的取数关键词
 _NUMERIC_QUERY_KEYWORDS = ('是多少', '多少', '金额', '数值', '比例', '占')

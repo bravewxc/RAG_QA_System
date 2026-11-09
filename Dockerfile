@@ -15,7 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # 创建数据目录
-RUN mkdir -p /app/chroma/knowledge /app/chroma/vector_store /app/db/cache /app/db/chat_history /app/logs
+RUN mkdir -p /app/chroma/knowledge /app/milvus/vector_store /app/db/cache /app/db/chat_history /app/logs
 
 EXPOSE 8000 7860
 

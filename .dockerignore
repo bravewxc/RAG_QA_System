@@ -14,6 +14,8 @@ build
 logs/*.log
 db/*.db
 db/*.db-journal
+chroma/vector_store/
+milvus/vector_store/
 evaluation/results/latest_invoke.json
 优化文档
 *.md

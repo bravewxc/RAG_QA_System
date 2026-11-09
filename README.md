@@ -1,6 +1,6 @@
 # General Doc QA System（通用文档智能问答系统）
 
-基于 RAG（检索增强生成）架构的企业级文档智能问答系统，以财务年报场景为切入点，提供多轮对话、跨期对比、跨知识库检索能力。系统经过 24 项迭代优化与完整工程化改造，RAGAS 四维评测指标从基线 0.49/0.40/0.56/0.36 提升至 **0.73/0.86/0.88/0.64**（context_precision / context_recall / faithfulness / answer_relevancy）。
+基于 RAG（检索增强生成）架构的企业级文档智能问答系统，以财务年报场景为切入点，提供多轮对话、跨期对比、跨知识库检索能力。当前向量存储采用 **Milvus（HNSW + COSINE）**，对外检索与问答接口保持不变。最近一次有完整记录的历史评测为 **0.7435 / 0.8590 / 0.8737 / 0.8588**（CP / CR / F / AR）；该结果对应当时的 127 条评测集与模型配置，不作为本次 Milvus 迁移后的复测结果。
 
 ## 功能特性
 
@@ -37,7 +37,7 @@
         ┌──────────────┬───────────┼──────────────┬─────────────┐
         ▼              ▼           ▼              ▼             ▼
    ┌─────────┐  ┌──────────┐ ┌─────────┐  ┌──────────┐  ┌────────────┐
-   │ Chroma  │  │  BM25    │ │ Rerank  │  │ DashScope│  │ SQLite     │
+   │ Milvus  │  │  BM25    │ │ Rerank  │  │ DashScope│  │ SQLite     │
    │ 向量库   │  │ 稀疏检索   │ │ 精排    │  │ LLM/Embed│  │ 缓存/历史    │
    └─────────┘  └──────────┘ └─────────┘  └──────────┘  └────────────┘
 ```
@@ -48,9 +48,9 @@
 
 | 类别 | 技术 |
 | --- | --- |
-| 大模型 | deepseek-v4-flash（生成）、qwen3.7-flash（评测） |
-| Embedding | text-embedding-v4（1024 维，cosine 距离） |
-| 向量数据库 | Chroma（HNSW 索引，本地持久化） |
+| 大模型 | deepseek-v4-flash（生成）、qwen3.8-flash（当前评测配置） |
+| Embedding | text-embedding-v4（cosine 距离） |
+| 向量数据库 | Milvus Standalone（HNSW + COSINE，pymilvus 2.5.18） |
 | 检索 | BM25（jieba + 40 个财务专有名词词典）、gte-rerank-v2、Small-to-Big、DualQuery |
 | 框架 | LangChain、FastAPI、Gradio、pydantic-settings |
 | 评估 | RAGAS 0.4.3 + 自研评测流水线 |
@@ -83,7 +83,10 @@ pip install -r requirements.txt
 cp .env.example .env
 # 编辑 .env，填入 DASHSCOPE_API_KEY
 
-# 4. 放置知识库文档（目录即知识库）
+# 4. 启动 Milvus Standalone 及依赖（本机 Python 运行也需要）
+docker compose up -d etcd minio milvus
+
+# 5. 放置知识库文档（目录即知识库）
 mkdir -p chroma/knowledge/报表库
 # 将你的 PDF/Word/TXT 文档放入该目录，例如年报文件
 ```
@@ -107,8 +110,8 @@ uvicorn app.api_server:app --host 0.0.0.0 --port 8000
 ### Docker 部署
 
 ```bash
-# 一键启动（应用 + Chroma + Redis）
-docker-compose up -d
+# 一键启动（应用 + Milvus + etcd + MinIO + Redis）
+docker compose up -d --build
 ```
 
 配置通过根目录 `.env` 文件注入，所有可配置项见 `.env.example`。
@@ -154,14 +157,16 @@ python evaluation/eval_pipeline.py --run-name "my-eval-run" --skip-invoke
 - **输出**：每次运行生成 CSV 落库（`evaluation/results/eval_runs.csv`）+ Markdown 对比报告（`evaluation/reports/`），自动记录环境指纹（chunk 参数 / 模型 / Prompt 哈希）供横向对比
 - **评测与线上同源**：评测流水线与线上服务共用 `_prepare_context` 与 Prompt 模板，保证"评测即线上"
 
-**最终指标**（127 条，比亚迪 2023-2025 年报）：
+**最近一次有完整记录的历史指标**（2026-09-08，127 条，比亚迪 2023-2025 年报）：
 
-| 指标 | 基线 | 最终 | 变化 |
-| --- | --- | --- | --- |
-| context_precision (CP) | 0.492 | 0.730 | +48.4% |
-| context_recall (CR) | 0.404 | 0.862 | +113.4% |
-| faithfulness (F) | 0.560 | 0.880 | +57.1% |
-| answer_relevancy (AR) | 0.360 | 0.640 | +77.8% |
+| 指标 | 历史结果 |
+| --- | --- |
+| context_precision (CP) | 0.7435 |
+| context_recall (CR) | 0.8590 |
+| faithfulness (F) | 0.8737 |
+| answer_relevancy (AR) | 0.8588 |
+
+> Milvus 迁移后的检索结果需要通过新的全量评测确认；历史结果不直接等同于迁移后结果。
 
 ## 项目结构
 
@@ -173,6 +178,7 @@ python evaluation/eval_pipeline.py --run-name "my-eval-run" --skip-invoke
 ├── core/                       # 核心业务层
 │   ├── combine_client.py     # 问答客户端（检索编排 + 记忆管理 + 缓存接入）
 │   ├── knowledge.py          # 知识库管理（懒加载 + 预热 + 并发锁）
+│   ├── milvus_store.py       # Milvus 适配（连接、HNSW、重试、日志）
 │   └── custom_loader.py      # 文档加载与切分（财报章节感知 + 父子 chunk）
 ├── infra/                      # 基础设施层
 │   ├── config.py             # pydantic-settings 全局配置
@@ -187,8 +193,9 @@ python evaluation/eval_pipeline.py --run-name "my-eval-run" --skip-invoke
 ├── structured_data/            # 三大主表结构化 JSON（注入生成阶段）
 ├── chroma/
 │   └── knowledge/             # 知识库源文档（自行放置，目录即知识库）
+├── tests/                       # Milvus 离线单元测试与真实服务集成测试
 ├── Dockerfile
-├── docker-compose.yml         # app + chromadb + redis
+├── docker-compose.yml         # app + milvus + etcd + minio + redis
 ├── requirements.txt
 └── .env.example               # 配置模板
 ```
@@ -203,6 +210,10 @@ python evaluation/eval_pipeline.py --run-name "my-eval-run" --skip-invoke
 | `ANSWER_MODEL` | 答案生成模型 | deepseek-v4-flash-0731 |
 | `EMBEDDING_MODEL` | 向量模型 | text-embedding-v4 |
 | `RERANK_MODEL` | 重排序模型 | gte-rerank-v2 |
+| `MILVUS_URI` | Milvus 服务地址 | http://localhost:19530 |
+| `MILVUS_DB_NAME` | Milvus 数据库名 | default |
+| `MILVUS_TOKEN` / `MILVUS_USER` / `MILVUS_PASSWORD` | 认证信息，token 优先 | 空 |
+| `MILVUS_CONSISTENCY_LEVEL` | 读写一致性级别 | Strong |
 | `DASHSCOPE_MAX_CONCURRENCY` | LLM 并发上限 | 8 |
 | `API_RATE_LIMIT` | API 限流 | 30/minute |
 | `SEMANTIC_CACHE_THRESHOLD` | 语义缓存相似度阈值 | 0.92 |

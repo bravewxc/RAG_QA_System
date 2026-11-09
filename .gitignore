@@ -41,8 +41,9 @@ db/
 *.db
 *.sqlite3
 
-# 向量索引（首次运行自动重建）
+# 向量索引（首次运行自动重建；chroma/vector_store 为旧版遗留目录）
 chroma/vector_store/
+milvus/vector_store/
 
 # 图片处理产物（渲染PNG + 多模态说明缓存，由知识库PDF派生）
 chroma/image_store/
